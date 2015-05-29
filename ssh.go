@@ -3,11 +3,20 @@ package main
 import (
 	"fmt"
 
+	"code.google.com/p/go.crypto/ssh"
+
 	"github.com/cloudfoundry/cli/plugin"
+	"github.com/sykesm/cf-ssh-plugin/models/app"
+	"github.com/sykesm/cf-ssh-plugin/models/credential"
+	"github.com/sykesm/cf-ssh-plugin/models/info"
 	"github.com/sykesm/cf-ssh-plugin/options"
 )
 
-type SshPlugin struct{}
+type SshPlugin struct {
+	AppFactory  app.AppFactory
+	InfoFactory info.InfoFactory
+	CredFactory credential.CredentialFactory
+}
 
 func (c *SshPlugin) GetMetadata() plugin.PluginMetadata {
 	return plugin.PluginMetadata{
@@ -34,6 +43,10 @@ func main() {
 }
 
 func (c *SshPlugin) Run(cli plugin.CliConnection, args []string) {
+	c.AppFactory = app.NewAppFactory(cli)
+	c.InfoFactory = info.NewInfoFactory(cli)
+	c.CredFactory = credential.NewCredentialFactory(cli)
+
 	if args[0] == "ssh" {
 		opts := &options.Options{}
 		err := opts.Parse(args[1:])
@@ -45,7 +58,48 @@ func (c *SshPlugin) Run(cli plugin.CliConnection, args []string) {
 }
 
 func (c *SshPlugin) RunWithOptions(cli plugin.CliConnection, opts *options.Options) {
+	app, err := c.AppFactory.Get(opts.AppName)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 
+	info, err := c.InfoFactory.Get()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	cred, err := c.CredFactory.Get()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	clientConfig := &ssh.ClientConfig{
+		User: fmt.Sprintf("cf:%s/%d", app.Guid, opts.Instance),
+		Auth: []ssh.AuthMethod{
+			ssh.Password(cred.Token),
+		},
+		// HostKeyCallback: func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+		// 	switch len(info.SSHEndpointFingerprint) {
+		// 	case 0:
+		// 		return nil
+		// 	case helpers.SHA1_FINGERPRINT_LENGTH:
+		// 		if helpers.SHA1Fingerprint(key) != info.SSHEndpointFingerprint {
+		// 			return errors.New("Host fingerprint does not match")
+		// 		}
+		// 	case helpers.MD5_FINGERPRINT_LENGTH:
+		// 		if helpers.MD5Fingerprint(key) != info.SSHEndpointFingerprint {
+		// 			return errors.New("Host fingerprint does not match")
+		// 		}
+		// 	default:
+		// 		return errors.New("invalid fingerprint format")
+		// 	}
+		// },
+	}
+
+	ssh.Dial("tcp", info.SSHEndpoint, clientConfig)
 }
 
 func (c *SshPlugin) showUsage() {
