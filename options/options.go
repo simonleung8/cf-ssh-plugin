@@ -14,6 +14,7 @@ type Options struct {
 	ForwardDestination string
 	LocalProxy         bool
 	LocalPortForward   bool
+	SkipHostValidation bool
 }
 
 var UsageError = errors.New("Invalid usage")
@@ -44,11 +45,16 @@ func (o *Options) Parse(args []string) error {
 		o.Instance = fc.Int("i")
 	}
 
+	if fc.IsSet("skip-host-validation") {
+		o.SkipHostValidation = fc.Bool("skip-host-validation")
+	}
+
 	return nil
 }
 
 func setupFlags() map[string]flags.FlagSet {
 	fs := make(map[string]flags.FlagSet)
 	fs["i"] = &cliFlags.IntFlag{Name: "i", Usage: ""}
+	fs["skip-host-validation"] = &cliFlags.BoolFlag{Name: "skip-host-validation", Usage: ""}
 	return fs
 }

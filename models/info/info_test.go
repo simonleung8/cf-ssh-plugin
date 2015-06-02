@@ -51,7 +51,7 @@ var _ = Describe("Info", func() {
 		})
 
 		Context("when retrieving /v2/info fails", func() {
-			BeforeEach(func() {
+			JustBeforeEach(func() {
 				fakeCliConnection.CliCommandWithoutTerminalOutputReturns(nil, errors.New("woops"))
 			})
 

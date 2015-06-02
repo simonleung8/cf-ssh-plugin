@@ -68,6 +68,28 @@ var _ = Describe("Options", func() {
 		})
 	})
 
+	Context("when --skip-host-validation is set", func() {
+		BeforeEach(func() {
+			args = []string{"app-name", "--skip-host-validation"}
+		})
+
+		It("disables host key validation", func() {
+			Expect(parseError).ToNot(HaveOccurred())
+			Expect(opts.SkipHostValidation).To(BeTrue())
+		})
+
+		Context("when --skip-host-validation=false is set", func() {
+			BeforeEach(func() {
+				args = []string{"app-name", "--skip-host-validation=false"}
+			})
+
+			It("disables host key validation", func() {
+				Expect(parseError).ToNot(HaveOccurred())
+				Expect(opts.SkipHostValidation).To(BeFalse())
+			})
+		})
+	})
+
 	Context("when an -i flag is provided", func() {
 		BeforeEach(func() {
 			args = []string{"app-name"}
