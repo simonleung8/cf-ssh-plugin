@@ -74,13 +74,10 @@ func (c *SshPlugin) RunWithOptions(cli plugin.CliConnection, opts *options.Optio
 	}
 
 	cred, err := c.CredFactory.Get()
-	fmt.Println("1")
 	if err != nil {
-		fmt.Println("2")
 		fmt.Println(err)
 		return
 	}
-	fmt.Println("3")
 
 	hostKeyCallback := func(hostname string, remote net.Addr, key ssh.PublicKey) error {
 		switch len(info.SSHEndpointFingerprint) {
@@ -111,13 +108,37 @@ func (c *SshPlugin) RunWithOptions(cli plugin.CliConnection, opts *options.Optio
 		HostKeyCallback: hostKeyCallback,
 	}
 
-	fmt.Println("daemon 1")
-	_, err = ssh.Dial("tcp", info.SSHEndpoint, clientConfig)
-	fmt.Println("daemon 2", err)
+	client, err := ssh.Dial("tcp", info.SSHEndpoint, clientConfig)
 	if err != nil {
 		fmt.Printf("FAILED\n%s\n", err.Error())
 		return
 	}
+	c.interactiveSession(client)
+}
+
+func (c *SshPlugin) interactiveSession(client *ssh.Client) {
+	fmt.Println("1")
+	session, err := client.NewSession()
+	fmt.Println("1.5")
+	if err != nil {
+		fmt.Printf("Failed to allocate SSH session\n")
+		return
+	}
+	defer session.Close()
+
+	fmt.Println("2")
+	modes := ssh.TerminalModes{
+		ssh.ECHO:          1,
+		ssh.TTY_OP_ISPEED: 115200,
+		ssh.TTY_OP_OSPEED: 115200,
+	}
+	fmt.Println("3")
+	err = session.RequestPty("xterm", 80, 40, modes)
+	if err != nil {
+		fmt.Printf("Failed to request pty\n")
+		return
+	}
+	fmt.Println("4")
 }
 
 func (c *SshPlugin) showUsage() {

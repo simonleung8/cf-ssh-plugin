@@ -2,16 +2,18 @@ package main_test
 
 import (
 	"errors"
+	"fmt"
 	"net"
 
 	"github.com/cloudfoundry-incubator/diego-ssh/authenticators/fake_authenticators"
 	"github.com/cloudfoundry-incubator/diego-ssh/daemon"
 	"github.com/cloudfoundry-incubator/diego-ssh/handlers"
+	"github.com/cloudfoundry-incubator/diego-ssh/handlers/fake_handlers"
 	"github.com/cloudfoundry-incubator/diego-ssh/server"
 	"github.com/cloudfoundry/cli/plugin/fakes"
 	"github.com/pivotal-golang/lager"
 	"github.com/pivotal-golang/lager/lagertest"
-	"github.com/sykesm/cf-ssh-plugin"
+	"github.com/sykesm/cf-ssh-plugin-bakup"
 	"github.com/sykesm/cf-ssh-plugin/models/app"
 	"github.com/sykesm/cf-ssh-plugin/models/app/app_fakes"
 	"github.com/sykesm/cf-ssh-plugin/models/credential"
@@ -67,8 +69,10 @@ var _ = Describe("DiegoSsh", func() {
 
 	Describe("RunWithOptions", func() {
 		var (
-			output []string
-			opts   *options.Options
+			output              []string
+			opts                *options.Options
+			fakeChannelHandlers map[string]handlers.NewChannelHandler
+			fakeChannelHandler  *fake_handlers.FakeNewChannelHandler
 		)
 
 		BeforeEach(func() {
@@ -76,9 +80,9 @@ var _ = Describe("DiegoSsh", func() {
 		})
 
 		JustBeforeEach(func() {
-			output = io_helpers.CaptureOutput(func() {
-				callCliCommandPlugin.RunWithOptions(fakeCliConnection, opts)
-			})
+			// output = io_helpers.CaptureOutput(func() {
+			callCliCommandPlugin.RunWithOptions(fakeCliConnection, opts)
+			// })
 		})
 
 		Context("when there is an error getting the app model", func() {
@@ -171,16 +175,27 @@ var _ = Describe("DiegoSsh", func() {
 				daemonSSHConfig.PasswordCallback = daemonAuthenticator.Authenticate
 				daemonSSHConfig.AddHostKey(TestHostKey)
 
+				fakeChannelHandler = &fake_handlers.FakeNewChannelHandler{}
+				fakeChannelHandler.HandleNewChannelStub = func(logger lager.Logger, newChannel ssh.NewChannel) {
+					// newChannel.Reject(ssh.Prohibited, "not now")
+					newChannel.Accept()
+				}
+				fakeChannelHandlers = map[string]handlers.NewChannelHandler{
+					"session": fakeChannelHandler,
+				}
+
 				sshDaemon = daemon.New(
 					logger.Session("sshd"),
 					daemonSSHConfig,
 					map[string]handlers.GlobalRequestHandler{},
-					map[string]handlers.NewChannelHandler{},
+					fakeChannelHandlers,
 				)
 
+				fmt.Println("up beforeeach")
+
+				fmt.Println("daemon", sshDaemon)
 				sshDaemonServer = server.NewServer(logger, "127.0.0.1:0", sshDaemon)
 				sshDaemonServer.SetListener(sshDaemonListener)
-				go sshDaemonServer.Serve()
 
 				sshInfo = &info.Info{
 					SSHEndpoint:            sshDaemonListener.Addr().String(),
@@ -302,6 +317,17 @@ var _ = Describe("DiegoSsh", func() {
 				})
 			})
 
+			FContext("when authentication is successful", func() {
+				BeforeEach(func() {
+					fmt.Println("down beforeeach")
+					sshInfo.SSHEndpointFingerprint = ""
+				})
+
+				It("opens a new session and request the pty", func() {
+					Consistently(output).ShouldNot(ContainSubstrings([]string{"Failed to allocate SSH session"}))
+					Expect(fakeChannelHandler.HandleNewChannelCallCount()).To(Equal(1))
+				})
+			})
 		})
 	})
 })
